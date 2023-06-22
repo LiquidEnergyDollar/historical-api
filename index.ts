@@ -92,9 +92,6 @@ const erc20 = new ethers.Contract(
 const app: Express = express();
 app.use(pinoHttp({ logger: logger }));
 
-    db.all('SELECT * FROM DeviationFactor', (_,rows) => {
-        console.log(rows);
-    })
 app.get('/deviationFactor', (req: Request, res: Response) => {
     if (req.query.begin == undefined || isNaN(Number(req.query.begin))) {
         res.status(400).json({
