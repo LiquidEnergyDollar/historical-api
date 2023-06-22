@@ -19,45 +19,54 @@ const createSql = fs.readFileSync('./sql/create-tables.sql', 'utf-8');
 db.exec(createSql);
 
 const insertDeviationFactor = db.prepare(
-    `INSERT INTO DeviationFactor VALUES (?, ?)`
+    `INSERT INTO DeviationFactor VALUES (?, ?, ?)`
 );
 
 const insertRedemptionRate = db.prepare(
-    `INSERT INTO RedemptionRate VALUES (?, ?)`
+    `INSERT INTO RedemptionRate VALUES (?, ?, ?)`
 );
 
 const insertLEDPrice = db.prepare(
-    `INSERT INTO LEDPrice VALUES (?, ?)`
+    `INSERT INTO LEDPrice VALUES (?, ?, ?)`
 );
 
 const insertLastGoodPrice = db.prepare(
-    `INSERT INTO LastGoodPrice VALUES (?, ?)`
+    `INSERT INTO LastGoodPrice VALUES (?, ?, ?)`
+);
+
+const insertMintedAddress = db.prepare(
+    `INSERT INTO MintedAddresses VALUES (?, ?, ?)`
 );
 
 const queryDeviationFactor = db.prepare(
     `SELECT * FROM DeviationFactor
-     WHERE timestamp > ? AND timestamp < ?`
+     WHERE network = ? AND timestamp > ? AND timestamp < ?`
 );
 
 const queryRedemptionRate = db.prepare(
     `SELECT * FROM RedemptionRate
-     WHERE timestamp > ? AND timestamp < ?`
+     WHERE network = ? AND timestamp > ? AND timestamp < ?`
 );
 
 const queryLEDPrice = db.prepare(
     `SELECT * FROM LEDPrice
-     WHERE timestamp > ? AND timestamp < ?`
+     WHERE network = ? AND timestamp > ? AND timestamp < ?`
 );
 
 const queryLastGoodPrice = db.prepare(
     `SELECT * FROM LastGoodPrice
-     WHERE timestamp > ? AND timestamp < ?`
+     WHERE network = ? AND timestamp > ? AND timestamp < ?`
+);
+
+const queryMintedAddress = db.prepare(
+    `SELECT * FROM MintedAddresses
+     WHERE network = ? AND address = ?`
 );
 
 // ----------------------------
 // Set up ethers
 const provider = new ethers.InfuraProvider(
-    'sepolia',
+    process.env.NETWORK,
     process.env.INFURA_API_KEY,
 );
 
@@ -81,22 +90,29 @@ const erc20 = new ethers.Contract(
 // ----------------------------
 // Set up express app/endpoints
 const app: Express = express();
-app.use(pinoHttp({logger: logger}));
+app.use(pinoHttp({ logger: logger }));
 
+    db.all('SELECT * FROM DeviationFactor', (_,rows) => {
+        console.log(rows);
+    })
 app.get('/deviationFactor', (req: Request, res: Response) => {
-    if (req.query.begin == undefined) {
+    if (req.query.begin == undefined || isNaN(Number(req.query.begin))) {
         res.status(400).json({
             "error": "Must define 'begin' param"
         });
         return;
     }
-    if (req.query.end == undefined) {
+    if (req.query.end == undefined || isNaN(Number(req.query.begin))) {
         res.status(400).json({
             "error": "Must define 'end' param"
         });
         return;
     }
-    queryDeviationFactor.all([req.query.begin, req.query.end], (err, rows) => {
+    queryDeviationFactor.all([
+        process.env.NETWORK,
+        req.query.begin,
+        req.query.end
+    ], (err, rows) => {
         if (err != undefined) {
             res.status(400).json({
                 "error": err.message
@@ -122,7 +138,11 @@ app.get('/redemptionRate', (req, res) => {
         });
         return;
     }
-    queryRedemptionRate.all([req.query.begin, req.query.end], (err, rows) => {
+    queryRedemptionRate.all([
+        process.env.NETWORK,
+        req.query.begin,
+        req.query.end
+], (err, rows) => {
         if (err != undefined) {
             res.status(400).json({
                 "error": err.message
@@ -148,7 +168,11 @@ app.get('/LEDPrice', (req, res) => {
         });
         return;
     }
-    queryLEDPrice.all([req.query.begin, req.query.end], (err, rows) => {
+    queryLEDPrice.all([
+        process.env.NETWORK,
+        req.query.begin,
+        req.query.end
+], (err, rows) => {
         if (err != undefined) {
             res.status(400).json({
                 "error": err.message
@@ -175,7 +199,11 @@ app.get('/lastGoodPrice', (req, res) => {
         return;
     }
 
-    queryLastGoodPrice.all([req.query.begin, req.query.end], (err, rows) => {
+    queryLastGoodPrice.all([
+        process.env.NETWORK,
+        req.query.begin,
+        req.query.end
+], (err, rows) => {
         if (err != undefined) {
             res.status(400).json({
                 "error": err.message
@@ -195,16 +223,33 @@ app.post('/mint', async (req, res) => {
         });
         return;
     }
-    if (req.query.amount == undefined) {
-        res.status(400).json({
-            "error": "Must define 'amount' param"
+
+    // Check to see if we've minted to address before
+    // Want to only mint once to a single address for trading tournament
+    queryMintedAddress.get([
+        process.env.NETWORK,
+        req.query.address
+    ], async (err, row) => {
+        if (err != undefined) {
+            res.status(400).json({
+                "error": err.message
+            });
+            return;
+        }
+        if (row != undefined) {
+            res.status(400).json({
+                "error": "Address has already been minted to"
+            });
+            return;
+        }
+        const amount = `100000000000000000000000`; // 100k
+        const tx = await erc20.mint(req.query.address, amount);
+
+        insertMintedAddress.run([req.query.address, process.env.NETWORK, tx.hash]);
+        res.json({
+            "txHash": tx.hash
         });
-        return;
-    }
-    const tx = await erc20.mint(req.query.address, req.query.amount);
-    res.json({
-        "txHash": tx.hash
-    });
+    })
 })
 
 app.listen(process.env.PORT, () => {
@@ -216,22 +261,23 @@ app.listen(process.env.PORT, () => {
 async function insertData() {
     const block = await provider.getBlock('latest');
     const timestamp = block!.timestamp;
+    const network = process.env.NETWORK;
 
     const deviationFactor = await priceFeed.deviationFactor();
-    insertDeviationFactor.run([timestamp, deviationFactor!.toString()]);
+    insertDeviationFactor.run([timestamp, network, deviationFactor!.toString()]);
 
     const redemptionRate = await priceFeed.redemptionRate();
-    insertRedemptionRate.run([timestamp, redemptionRate!.toString()]);
+    insertRedemptionRate.run([timestamp, network, redemptionRate!.toString()]);
 
     const LEDPrice = await priceFeed.LEDPrice();
-    insertLEDPrice.run([timestamp, LEDPrice!.toString()]);
+    insertLEDPrice.run([timestamp, network, LEDPrice!.toString()]);
 
     const lastGoodPrice = await priceFeed.lastGoodPrice();
-    insertLastGoodPrice.run([timestamp, lastGoodPrice!.toString()]);
+    insertLastGoodPrice.run([timestamp, network, lastGoodPrice!.toString()]);
 }
 
 const insertionCronJob = new CronJob(
-    '0 * * * *', // every hour
+    '* * * * *', // every hour
     async () => {
         try {
             await insertData();
