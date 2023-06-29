@@ -293,7 +293,7 @@ app.post('/interactions', async function (req, res) {
     }
   });
 
-app.listen(process.env.PORT, () => {
+  app.listen(parseInt(process.env.PORT!), process.env.IP!, () => {
     console.log(`⚡️[server]: Server is running at http://localhost:${process.env.PORT}`);
 });
 
