@@ -8,6 +8,8 @@ import erc20ABI from './abi/ERC20.json';
 import { CronJob } from 'cron';
 import { logger } from './utils/logger';
 import { pinoHttp } from 'express-pino-logger';
+import { VerifyDiscordRequest, getRandomEmoji } from './utils/discord';
+import { InteractionType, InteractionResponseType } from 'discord-interactions';
 
 dotenv.config();
 
@@ -91,6 +93,7 @@ const erc20 = new ethers.Contract(
 // Set up express app/endpoints
 const app: Express = express();
 app.use(pinoHttp({ logger: logger }));
+app.use(express.json({ verify: VerifyDiscordRequest(process.env.DISCORD_PUBLIC_KEY!) }));
 
 app.get('/deviationFactor', (req: Request, res: Response) => {
     if (req.query.begin == undefined || isNaN(Number(req.query.begin))) {
@@ -248,6 +251,47 @@ app.post('/mint', async (req, res) => {
         });
     })
 })
+
+/**
+ * Interactions endpoint URL where Discord will send HTTP requests
+ */
+app.post('/interactions', async function (req, res) {
+    // Interaction type and data
+    const { type, id, data } = req.body;
+  
+    /**
+     * Handle verification requests
+     */
+    if (type === InteractionType.PING) {
+      return res.send({ type: InteractionResponseType.PONG });
+    }
+  
+    /**
+     * Handle slash command requests
+     * See https://discord.com/developers/docs/interactions/application-commands#slash-commands
+     */
+    if (type === InteractionType.APPLICATION_COMMAND) {
+      const { name, options } = data;
+  
+      // "faucet" command
+      if (name === 'faucet') {
+
+        if (!options || options.length != 1) {
+            return;
+        }
+        const address = options[0].value;
+
+        // Send a message into the channel where command was triggered from
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            // Fetches a random emoji to send from a helper function
+            content: 'Received ' + address + getRandomEmoji(),
+          },
+        });
+      }
+    }
+  });
 
 app.listen(process.env.PORT, () => {
     console.log(`⚡️[server]: Server is running at http://localhost:${process.env.PORT}`);
