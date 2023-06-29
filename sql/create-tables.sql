@@ -30,6 +30,14 @@ CREATE TABLE IF NOT EXISTS LastGoodPrice (
        CONSTRAINT IX_LastGoodPriceTimestamp UNIQUE (timestamp)
 );
 
+CREATE TABLE IF NOT EXISTS MarketPrice (
+       timestamp INTEGER NOT NULL,
+       network VARCHAR(200) NOT NULL,
+       value VARCHAR(200) NOT NULL,
+
+       CONSTRAINT IX_MarketPriceTimestamp UNIQUE (timestamp)
+);
+
 CREATE TABLE IF NOT EXISTS MintedAddresses (
        address VARCHAR(200) NOT NULL,
        network VARCHAR(200) NOT NULL,

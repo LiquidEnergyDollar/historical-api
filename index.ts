@@ -8,6 +8,7 @@ import erc20ABI from './abi/ERC20.json';
 import { CronJob } from 'cron';
 import { logger } from './utils/logger';
 import { pinoHttp } from 'express-pino-logger';
+import cors from 'cors';
 
 dotenv.config();
 
@@ -34,6 +35,10 @@ const insertLastGoodPrice = db.prepare(
     `INSERT INTO LastGoodPrice VALUES (?, ?, ?)`
 );
 
+const insertMarketPrice = db.prepare(
+    `INSERT INTO MarketPrice VALUES (?, ?, ?)`
+);
+
 const insertMintedAddress = db.prepare(
     `INSERT INTO MintedAddresses VALUES (?, ?, ?)`
 );
@@ -55,6 +60,11 @@ const queryLEDPrice = db.prepare(
 
 const queryLastGoodPrice = db.prepare(
     `SELECT * FROM LastGoodPrice
+     WHERE network = ? AND timestamp > ? AND timestamp < ?`
+);
+
+const queryMarketPrice = db.prepare(
+    `SELECT * FROM MarketPrice
      WHERE network = ? AND timestamp > ? AND timestamp < ?`
 );
 
@@ -91,6 +101,7 @@ const erc20 = new ethers.Contract(
 // Set up express app/endpoints
 const app: Express = express();
 app.use(pinoHttp({ logger: logger }));
+app.use(cors());
 
 app.get('/deviationFactor', (req: Request, res: Response) => {
     if (req.query.begin == undefined || isNaN(Number(req.query.begin))) {
@@ -213,6 +224,37 @@ app.get('/lastGoodPrice', (req, res) => {
     })
 });
 
+app.get('/marketPrice', (req, res) => {
+    if (req.query.begin == undefined) {
+        res.status(400).json({
+            "error": "Must define 'begin' param"
+        });
+        return;
+    }
+    if (req.query.end == undefined) {
+        res.status(400).json({
+            "error": "Must define 'end' param"
+        });
+        return;
+    }
+
+    queryMarketPrice.all([
+        process.env.NETWORK,
+        req.query.begin,
+        req.query.end
+], (err, rows) => {
+        if (err != undefined) {
+            res.status(400).json({
+                "error": err.message
+            });
+            return;
+        }
+        res.json({
+            "data": rows
+        })
+    })
+});
+
 app.post('/mint', async (req, res) => {
     if (req.query.address == undefined) {
         res.status(400).json({
@@ -249,8 +291,8 @@ app.post('/mint', async (req, res) => {
     })
 })
 
-app.listen(process.env.PORT, () => {
-    console.log(`⚡️[server]: Server is running at http://localhost:${process.env.PORT}`);
+app.listen(parseInt(process.env.PORT!), process.env.IP!, () => {
+    console.log(`⚡️[server]: Server is running at http://${process.env.IP}:${process.env.PORT}`);
 });
 
 // ----------------------------
@@ -271,6 +313,9 @@ async function insertData() {
 
     const lastGoodPrice = await priceFeed.lastGoodPrice();
     insertLastGoodPrice.run([timestamp, network, lastGoodPrice!.toString()]);
+
+    const marketPrice = await priceFeed.getMarketPrice();
+    insertMarketPrice.run([timestamp, network, marketPrice!.toString()]);
 }
 
 const insertionCronJob = new CronJob(
