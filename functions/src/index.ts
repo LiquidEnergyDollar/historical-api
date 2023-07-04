@@ -272,7 +272,7 @@ app.post('/interactions', async function (req, res) {
                 res.send({
                     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
                     data: {
-                        content: '💧 ' + tx.hash,
+                        content: '💧 +$100k - Now head to https://app.led.money to trade.',
                     },
                 });
                 return;
@@ -299,7 +299,7 @@ app.get('/test', async (req, res) => {
 
 });
 
-exports.app = functions.https.onRequest(app);
+exports.app = functions.runWith({ maxInstances: 1}).https.onRequest(app);
 
 // ----------------------------
 // Set up cron job for data insertion

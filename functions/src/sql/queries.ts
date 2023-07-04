@@ -13,7 +13,8 @@ const enum Tables {
 async function queryFrom (table:string, network: string, timestampStart: number, timestampEnd: number) {
     const client = await pool.connect();
     return client.query(`SELECT * FROM ${table}
-    WHERE network = '${network}' AND timestamp > '${timestampStart}' AND timestamp < '${timestampEnd}'`);
+    WHERE network = '${network}' AND timestamp > '${timestampStart}' AND timestamp < '${timestampEnd}' 
+    ORDER BY timestamp ASC`);
 }
 
 async function insertInto (table:string, network: string, timestamp: number, value: string) {
@@ -81,10 +82,4 @@ export const queryMintedAddress = async (network: string, address: string, userI
 export const queryAllMintedAddress = async (network: string)=> {
     const client = await pool.connect();
     return client.query(`SELECT * FROM MintedAddresses`);
-}
-
-
-export const dropTable = async () => {
-    const client = await pool.connect();
-    return client.query("DROP TABLE MintedAddresses");
 }
