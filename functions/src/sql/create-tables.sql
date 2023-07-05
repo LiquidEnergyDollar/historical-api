@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS DeviationFactor (
-       timestamp INTEGER NOT NULL,
+       timestamp BIGINT NOT NULL,
        network VARCHAR(200) NOT NULL,
        value VARCHAR(200) NOT NULL,
 
@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS DeviationFactor (
 );
 
 CREATE TABLE IF NOT EXISTS RedemptionRate (
-       timestamp INTEGER NOT NULL,
+       timestamp BIGINT NOT NULL,
        network VARCHAR(200) NOT NULL,
        value VARCHAR(200) NOT NULL,
 
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS RedemptionRate (
 );
 
 CREATE TABLE IF NOT EXISTS LEDPrice (
-       timestamp INTEGER NOT NULL,
+       timestamp BIGINT NOT NULL,
        network VARCHAR(200) NOT NULL,
        value VARCHAR(200) NOT NULL,
 
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS LEDPrice (
 );
 
 CREATE TABLE IF NOT EXISTS LastGoodPrice (
-       timestamp INTEGER NOT NULL,
+       timestamp BIGINT NOT NULL,
        network VARCHAR(200) NOT NULL,
        value VARCHAR(200) NOT NULL,
 
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS LastGoodPrice (
 );
 
 CREATE TABLE IF NOT EXISTS MarketPrice (
-       timestamp INTEGER NOT NULL,
+       timestamp BIGINT NOT NULL,
        network VARCHAR(200) NOT NULL,
        value VARCHAR(200) NOT NULL,
 
@@ -40,8 +40,10 @@ CREATE TABLE IF NOT EXISTS MarketPrice (
 
 CREATE TABLE IF NOT EXISTS MintedAddresses (
        address VARCHAR(200) NOT NULL,
+       userId VARCHAR(200) NOT NULL,
        network VARCHAR(200) NOT NULL,
        txhash VARCHAR(200) NOT NULL,
 
-       CONSTRAINT IX_MintedAddressesValue UNIQUE (address)
+       CONSTRAINT IX_MintedAddressesValue UNIQUE (address),
+       CONSTRAINT IX_MintedUserIdValue UNIQUE (userId)
 );
