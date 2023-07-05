@@ -83,3 +83,9 @@ export const queryAllMintedAddress = async (network: string)=> {
     const client = await pool.connect();
     return client.query(`SELECT * FROM MintedAddresses`);
 }
+
+export const queryAddress = async (network: string, userId: string)=> {
+    const client = await pool.connect();
+    return client.query(`SELECT address FROM MintedAddresses
+        WHERE network = '${network}' AND userId = '${userId}'`);
+}

@@ -1,43 +1,16 @@
 const functions = require("firebase-functions");
 import express, { Express, Request, Response } from 'express';
 import dotenv from 'dotenv';
-import * as ethers from 'ethers';
-import pricefeedABI from './abi/PriceFeed.json';
-import erc20ABI from './abi/ERC20.json';
 import { CronJob } from 'cron';
 import * as logger from "firebase-functions/logger";
 import { InteractionType, InteractionResponseType } from 'discord-interactions';
 import cors from "cors";
 import nacl from "tweetnacl";
-import { createTablesIfNotExist, insertDeviationFactor, insertLEDPrice, insertLastGoodPrice, insertMarketPrice, insertMintedAddress, insertRedemptionRate, queryAllMintedAddress, queryDeviationFactor, queryLEDPrice, queryLastGoodPrice, queryMarketPrice, queryMintedAddress, queryRedemptionRate } from './sql/queries';
+import { createTablesIfNotExist, insertDeviationFactor, insertLEDPrice, insertLastGoodPrice, insertMarketPrice, insertMintedAddress, insertRedemptionRate, queryAddress, queryAllMintedAddress, queryDeviationFactor, queryLEDPrice, queryLastGoodPrice, queryMarketPrice, queryMintedAddress, queryRedemptionRate } from './sql/queries';
+import { erc20, ledToken, priceFeed, provider, stabilityPool, troveManager } from './contracts/contracts';
 
 dotenv.config();
 createTablesIfNotExist();
-
-// ----------------------------
-// Set up ethers
-const provider = new ethers.InfuraProvider(
-    process.env.NETWORK,
-    process.env.INFURA_API_KEY,
-);
-
-const signer = new ethers.Wallet(
-    process.env.DEPLOYER_PRIVATE_KEY!,
-    provider
-)
-
-const priceFeed = new ethers.Contract(
-    process.env.PRICE_FEED_ADDRESS!,
-    pricefeedABI,
-    signer
-);
-
-const erc20 = new ethers.Contract(
-    process.env.ERC_20_ADDRESS!,
-    erc20ABI,
-    signer
-)
-
 
 // ----------------------------
 // Set up express app/endpoints
@@ -285,12 +258,41 @@ app.post('/interactions', async function (req, res) {
                     },
                 });
             }
+        } else if (name === 'score') {
+            // Send a message into the channel where command was triggered from
+            res.send({
+                type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                data: {
+                    content: await getUserScore(userId),
+                },
+            });
         }
     }
     return res.status(404).json({
         "error": "Unexpected command"
     });
 });
+
+async function getUserScore(userId: string): Promise<string> {
+    const { rows } = await queryAddress(process.env.NETWORK!, userId);
+    if (rows == undefined || rows.length != 1) {
+        return "❌ Could not locate user's address";
+    }
+    const address = rows[0].address;
+    
+    const marketPrice = await priceFeed.getMarketPrice();
+    const ledBalance = await ledToken.balanceOf(address);
+    const usdBalance = await erc20.balanceOf(address);
+    const stabilityBalance = await stabilityPool.getCompoundedTHUSDDeposit(address);
+    const stabilityUSD = await stabilityPool.getDepositorCollateralGain(address);
+    const { debt, coll, pendingTHUSDDebtReward, pendingCollateralReward } = await troveManager.getEntireDebtAndColl(address);
+    const ledAssets = (ledBalance + stabilityBalance);
+    const ledDebt = debt;
+    const usdAssets = (usdBalance + stabilityUSD + coll);
+    const totalLEDInUSD = BigInt((ledAssets - ledDebt) * marketPrice) / BigInt(1e18);
+    const totalAssets = usdAssets + totalLEDInUSD;
+    return `USD Assets: ${usdAssets} \n LED Assets: ${ledAssets} \n LED Debt: ${ledDebt} \n 🧮 Total assets: $${totalAssets}`;
+}
 
 app.get('/test', async (req, res) => {
 
