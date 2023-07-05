@@ -13,8 +13,12 @@ const enum Tables {
 async function queryFrom (table:string, network: string, timestampStart: number, timestampEnd: number) {
     const client = await pool.connect();
     return client.query(`SELECT * FROM ${table}
+<<<<<<< HEAD
     WHERE network = '${network}' AND timestamp > '${timestampStart}' AND timestamp < '${timestampEnd}' 
     ORDER BY timestamp ASC`);
+=======
+    WHERE network = '${network}' AND timestamp > '${timestampStart}' AND timestamp < '${timestampEnd}'`);
+>>>>>>> main
 }
 
 async function insertInto (table:string, network: string, timestamp: number, value: string) {
