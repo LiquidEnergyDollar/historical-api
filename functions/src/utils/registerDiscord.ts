@@ -15,9 +15,17 @@ const FAUCET_COMMAND = {
       max_lenght: 42,
       required: true,
     },
-  ] 
+  ]
 };
 
-const ALL_COMMANDS = [FAUCET_COMMAND];
+// score command
+const SCORE_COMMAND = {
+  name: 'score',
+  description: 'Returns the total assets minus debt (at market price)',
+  type: 1,
+  options: []
+};
+
+const ALL_COMMANDS = [FAUCET_COMMAND, SCORE_COMMAND];
 
 InstallGlobalCommands(process.env.APP_ID!, ALL_COMMANDS);
