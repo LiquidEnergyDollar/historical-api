@@ -291,7 +291,7 @@ async function getUserScore(userId: string): Promise<string> {
     const usdAssets = (usdBalance + stabilityUSD + coll);
     const totalLEDInUSD = BigInt((ledAssets - ledDebt) * marketPrice) / BigInt(1e18);
     const totalAssets = usdAssets + totalLEDInUSD;
-    return `USD Assets: ${usdAssets} \n LED Assets: ${ledAssets} \n LED Debt: ${ledDebt} \n 🧮 Total assets: $${totalAssets}`;
+    return `USD Assets: $${usdAssets / BigInt(1e18)}\nLED Assets: ${ledAssets / BigInt(1e18)} LED\nLED Debt: ${ledDebt / BigInt(1e18)} LED\nLED Price: $${(Number(marketPrice) / 1e18).toFixed(2) }\n🧮 Total assets: $${totalAssets / BigInt(1e18)}`;
 }
 
 app.get('/test', async (req, res) => {
