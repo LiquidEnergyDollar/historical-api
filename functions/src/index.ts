@@ -416,7 +416,7 @@ async function insertData() {
 }
 
 const insertionCronJob = new CronJob(
-    '*/1 * * * *', // every 30 min
+    '*/30 * * * *', // every 30 min
     async () => {
         try {
             await insertData();
