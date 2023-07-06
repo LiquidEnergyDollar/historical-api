@@ -6,7 +6,7 @@ import * as logger from "firebase-functions/logger";
 import { InteractionType, InteractionResponseType } from 'discord-interactions';
 import cors from "cors";
 import nacl from "tweetnacl";
-import { createTablesIfNotExist, insertDeviationFactor, insertLEDPrice, insertLastGoodPrice, insertMarketPrice, insertMintedAddress, insertRedemptionRate, queryAddress, queryAllMintedAddress, queryDeviationFactor, queryLEDPrice, queryLastGoodPrice, queryMarketPrice, queryMintedAddress, queryRedemptionRate } from './sql/queries';
+import { createTablesIfNotExist, getFaucetedAddresses, insertDeviationFactor, insertLEDPrice, insertLastGoodPrice, insertMarketPrice, insertMintedAddress, insertRedemptionRate, insertUserBalanceSnapshots, queryAddress, queryDeviationFactor, queryLEDPrice, queryLastGoodPrice, queryLeaderboard, queryMarketPrice, queryMintedAddress, queryRedemptionRate } from './sql/queries';
 import { erc20, ledToken, priceFeed, provider, stabilityPool, troveManager } from './contracts/contracts';
 
 dotenv.config();
@@ -158,27 +158,6 @@ app.get('/marketPrice', async (req, res) => {
     }
 });
 
-// app.post('/mint', async (req, res) => {
-//     if (req.query.address == undefined || typeof req.query.address != 'string') {
-//         res.status(400).json({
-//             "error": "Must define 'address' param"
-//         });
-//         return;
-//     }
-//     await mint(req.query.address,
-//         (txHash:string) => { 
-//             res.json({
-//                 "txHash": txHash
-//             })
-//         },
-//         (errorMsg:string) => { 
-//             res.status(400).json({
-//                 "error": errorMsg
-//             })
-//         }
-//     );
-// })
-
 /**
  * Interactions endpoint URL where Discord will send HTTP requests
  */
@@ -279,24 +258,68 @@ async function getUserScore(userId: string): Promise<string> {
         return "❌ Could not locate user's address";
     }
     const address = rows[0].address;
+    const snapshot = await getUserBalanceSnapshot(address);
     
-    const marketPrice = await priceFeed.getMarketPrice();
+    return `USD Assets: $${snapshot.usdBalance! / BigInt(1e18)}\nLED Assets: ${snapshot.ledBalance! / BigInt(1e18)} LED\nLED Debt: ${snapshot.ledDebt! / BigInt(1e18)} LED\nLED Price: $${(Number(snapshot.marketPrice) / 1e18).toFixed(2) }\n🧮 Total assets: $${snapshot.totalAccountValue() / BigInt(1e18)}`;
+}
+
+class UserBalanceSnapshot {
+    timestamp: number | undefined;
+    usdBalance: bigint | undefined;
+    ledBalance: bigint | undefined;
+    ledDebt: bigint | undefined;
+    marketPrice: bigint | undefined;
+    getTotalLED(): bigint {
+        if (this.ledBalance == undefined || this.ledDebt == undefined) {
+            throw new Error(`Uninitialized values ${this.ledBalance} ${this.ledDebt}`);
+        }
+        return this.ledBalance - this.ledDebt;
+    }
+    totalAccountValue(): bigint {
+        if (this.ledBalance == undefined || 
+            this.ledDebt == undefined || 
+            this.marketPrice == undefined || 
+            this.usdBalance == undefined) {
+            throw new Error(`Uninitialized values ${this.ledBalance} ${this.ledDebt} ${this.marketPrice} ${this.usdBalance}`);
+        }
+        const totalLEDInUSD = (this.getTotalLED() * this.marketPrice) / BigInt(1e18);
+        return this.usdBalance + totalLEDInUSD;
+    }
+}
+
+async function getUserBalanceSnapshot(address: string): Promise<UserBalanceSnapshot> {
+    if (!address || address.length != 42) {
+        throw new Error("Invalid address " + address);
+    }
+    const snapshot = new UserBalanceSnapshot();
+    
+    snapshot.marketPrice = await priceFeed.getMarketPrice();
     const ledBalance = await ledToken.balanceOf(address);
     const usdBalance = await erc20.balanceOf(address);
     const stabilityBalance = await stabilityPool.getCompoundedTHUSDDeposit(address);
     const stabilityUSD = await stabilityPool.getDepositorCollateralGain(address);
     const { debt, coll, pendingTHUSDDebtReward, pendingCollateralReward } = await troveManager.getEntireDebtAndColl(address);
-    const ledAssets = (ledBalance + stabilityBalance);
-    const ledDebt = debt;
-    const usdAssets = (usdBalance + stabilityUSD + coll);
-    const totalLEDInUSD = BigInt((ledAssets - ledDebt) * marketPrice) / BigInt(1e18);
-    const totalAssets = usdAssets + totalLEDInUSD;
-    return `USD Assets: $${usdAssets / BigInt(1e18)}\nLED Assets: ${ledAssets / BigInt(1e18)} LED\nLED Debt: ${ledDebt / BigInt(1e18)} LED\nLED Price: $${(Number(marketPrice) / 1e18).toFixed(2) }\n🧮 Total assets: $${totalAssets / BigInt(1e18)}`;
+    snapshot.ledBalance = (ledBalance + stabilityBalance);
+    snapshot.ledDebt = debt;
+    snapshot.usdBalance = (usdBalance + stabilityUSD + coll);
+    return snapshot;
 }
+
+app.get('/leaderboard', async (req, res) => {
+
+    const { rows } = await queryLeaderboard(process.env.NETWORK!);
+    res.send(JSON.stringify(rows));
+
+});
+
+app.get('/testScore', async (req, res) => {
+    const snapshot = await getUserScore("652677723197800467");
+    res.send(JSON.stringify(snapshot));
+});
 
 app.get('/test', async (req, res) => {
 
-    const rows = await queryAllMintedAddress(process.env.NETWORK!);
+    const rows = await getFaucetedAddresses(process.env.NETWORK!);
     res.send(JSON.stringify(rows));
 
 });
@@ -308,22 +331,49 @@ exports.app = functions.runWith({ maxInstances: 1}).https.onRequest(app);
 async function insertData() {
     const block = await provider.getBlock('latest');
     const timestamp = block!.timestamp;
-    const network = process.env.NETWORK;
+    const network = process.env.NETWORK!;
 
     const deviationFactor = await priceFeed.deviationFactor();
-    insertDeviationFactor(network!, timestamp, deviationFactor!.toString());
+    insertDeviationFactor(network, timestamp, deviationFactor!.toString());
 
     const redemptionRate = await priceFeed.redemptionRate();
-    insertRedemptionRate(network!, timestamp, redemptionRate!.toString());
+    insertRedemptionRate(network, timestamp, redemptionRate!.toString());
 
     const LEDPrice = await priceFeed.LEDPrice();
-    insertLEDPrice(network!, timestamp, LEDPrice!.toString());
+    insertLEDPrice(network, timestamp, LEDPrice!.toString());
 
     const lastGoodPrice = await priceFeed.lastGoodPrice();
-    insertLastGoodPrice(network!, timestamp, lastGoodPrice!.toString());
+    insertLastGoodPrice(network, timestamp, lastGoodPrice!.toString());
 
     const marketPrice = await priceFeed.getMarketPrice();
-    insertMarketPrice(network!, timestamp, marketPrice!.toString());
+    insertMarketPrice(network, timestamp, marketPrice!.toString());
+
+    const { rows }  = await getFaucetedAddresses(network);
+    const insertions = [];
+    for (let i = 0; i < rows.length; i++) {
+        const user = rows[i];
+        insertions.push(new Promise(async (res, rej) => {
+            try {
+                const snapshot = await getUserBalanceSnapshot(user.address);
+                    
+                    await insertUserBalanceSnapshots(
+                        timestamp,
+                        network,
+                        user.address,
+                        user.userid,
+                        snapshot.usdBalance!.toString(),
+                        snapshot.ledBalance!.toString(),
+                        snapshot.ledDebt!.toString(),
+                        snapshot.marketPrice!.toString(),
+                        snapshot.totalAccountValue().toString()
+                    
+                    );
+            } catch (err) {
+                logger.error("Could not calculate user balance snapshot " + err);
+            }
+        }));
+    }
+    await Promise.all(insertions);
 }
 
 const insertionCronJob = new CronJob(
