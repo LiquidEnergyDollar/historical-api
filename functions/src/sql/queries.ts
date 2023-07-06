@@ -9,7 +9,7 @@ const enum Tables {
     LastGoodPrice = "LastGoodPrice",
     MarketPrice = "MarketPrice",
     MintedAddresses = "MintedAddresses",
-    UserBalanceSnapshots = "UserBalanceSnapshots"
+    BalanceSnapshots = "BalanceSnapshots"
 }
 
 async function queryFrom (table:string, network: string, timestampStart: number, timestampEnd: number) {
@@ -56,9 +56,9 @@ export const insertMintedAddress = async (network: string, address: string, user
     return client.query(`INSERT INTO ${Tables.MintedAddresses} VALUES ('${address}', '${userId}', '${network}', '${txHash}')`);
 }
 
-export const insertUserBalanceSnapshots = async (timestamp:number, network: string, address: string, userId: string, usdAssets: string,  ledAssets: string,  ledDebt: string,  ledPrice: string,  netValue: string)=> {
+export const insertBalanceSnapshots = async (timestamp:number, network: string, address: string, userId: string, username: string, avatarUrl: string, usdAssets: string,  ledAssets: string,  ledDebt: string,  ledPrice: string,  netValue: string)=> {
     const client = await getPoolClient();
-    return client.query(`INSERT INTO ${Tables.UserBalanceSnapshots} VALUES ('${timestamp}', '${network}', '${address}', '${userId}', '${usdAssets}', '${ledAssets}', '${ledDebt}', '${ledPrice}', '${netValue}')`);
+    return client.query(`INSERT INTO ${Tables.BalanceSnapshots} VALUES ('${timestamp}', '${network}', '${address}', '${userId}', '${username}', '${avatarUrl}', '${usdAssets}', '${ledAssets}', '${ledDebt}', '${ledPrice}', '${netValue}')`);
 }
 
 export const queryDeviationFactor = async (network: string, timestampStart: number, timestampEnd: number)=> {
@@ -101,7 +101,7 @@ export const queryAddress = async (network: string, userId: string)=> {
 
 export const queryLeaderboard = async (network: string)=> {
     const client = await getPoolClient();
-    return client.query(`SELECT * FROM ${Tables.UserBalanceSnapshots}
+    return client.query(`SELECT * FROM ${Tables.BalanceSnapshots}
         WHERE network = '${network}'
-        AND timestamp IN (SELECT MAX(timestamp) FROM ${Tables.UserBalanceSnapshots})`);
+        AND timestamp IN (SELECT MAX(timestamp) FROM ${Tables.BalanceSnapshots})`);
 }

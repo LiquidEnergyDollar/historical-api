@@ -6,11 +6,16 @@ import * as logger from "firebase-functions/logger";
 import { InteractionType, InteractionResponseType } from 'discord-interactions';
 import cors from "cors";
 import nacl from "tweetnacl";
-import { createTablesIfNotExist, getFaucetedAddresses, insertDeviationFactor, insertLEDPrice, insertLastGoodPrice, insertMarketPrice, insertMintedAddress, insertRedemptionRate, insertUserBalanceSnapshots, queryAddress, queryDeviationFactor, queryLEDPrice, queryLastGoodPrice, queryLeaderboard, queryMarketPrice, queryMintedAddress, queryRedemptionRate } from './sql/queries';
+import { createTablesIfNotExist, getFaucetedAddresses, insertDeviationFactor, insertLEDPrice, insertLastGoodPrice, insertMarketPrice, insertMintedAddress, insertRedemptionRate, insertBalanceSnapshots, queryAddress, queryDeviationFactor, queryLEDPrice, queryLastGoodPrice, queryLeaderboard, queryMarketPrice, queryMintedAddress, queryRedemptionRate } from './sql/queries';
 import { erc20, ledToken, priceFeed, provider, stabilityPool, troveManager } from './contracts/contracts';
+const { Client, GatewayIntentBits } = require('discord.js');
+
 
 dotenv.config();
 createTablesIfNotExist();
+const discordClient = new Client({ intents: [GatewayIntentBits.GuildMembers] });
+discordClient.login(process.env.DISCORD_TOKEN!);
+
 
 // ----------------------------
 // Set up express app/endpoints
@@ -306,10 +311,43 @@ async function getUserBalanceSnapshot(address: string): Promise<UserBalanceSnaps
 }
 
 app.get('/leaderboard', async (req, res) => {
-
     const { rows } = await queryLeaderboard(process.env.NETWORK!);
     res.send(JSON.stringify(rows));
+});
 
+app.get('/takeSnapshot', async (req, res) => {
+    const snapshotPrice = req.query.price;
+    if (!snapshotPrice) {
+        res.send("Missing \"price\" query string parameter");
+    }
+    const { rows }  = await getFaucetedAddresses(process.env.NETWORK!);
+    const userSnapshots = [];
+    for (let i = 0; i < rows.length; i++) {
+        const user = rows[i];
+        userSnapshots.push(new Promise(async (resolve, reject) => {
+            
+                const discordUser = await discordClient.users.fetch(user.userid);
+                const snapshot = await getUserBalanceSnapshot(user.address);
+                // Overwrite marketPrice with the provided price
+                snapshot.marketPrice = BigInt(snapshotPrice!.toString());
+                resolve(user.address + "," +
+                    user.userid + "," +
+                    discordUser.username + "," +
+                    discordUser.displayAvatarURL() + "," +
+                    snapshot.usdBalance!.toString() + "," +
+                    snapshot.ledBalance!.toString() + "," +
+                    snapshot.ledDebt!.toString() + "," +
+                    snapshot.marketPrice!.toString() + "," +
+                    snapshot.totalAccountValue().toString())
+            })
+        );
+    }
+    const snapshots = await Promise.all(userSnapshots);
+    var result = "";
+    snapshots.forEach((snapshot) => {
+        result += snapshot + "<br>";
+    });
+    res.send(result);
 });
 
 app.get('/testScore', async (req, res) => {
@@ -318,10 +356,8 @@ app.get('/testScore', async (req, res) => {
 });
 
 app.get('/test', async (req, res) => {
-
     const rows = await getFaucetedAddresses(process.env.NETWORK!);
     res.send(JSON.stringify(rows));
-
 });
 
 exports.app = functions.runWith({ maxInstances: 1}).https.onRequest(app);
@@ -355,12 +391,15 @@ async function insertData() {
         insertions.push(new Promise(async (res, rej) => {
             try {
                 const snapshot = await getUserBalanceSnapshot(user.address);
+                const discordUser = await discordClient.users.fetch(user.userid);
                     
-                    await insertUserBalanceSnapshots(
+                    await insertBalanceSnapshots(
                         timestamp,
                         network,
                         user.address,
                         user.userid,
+                        discordUser.username,
+                        discordUser.displayAvatarURL(),
                         snapshot.usdBalance!.toString(),
                         snapshot.ledBalance!.toString(),
                         snapshot.ledDebt!.toString(),
