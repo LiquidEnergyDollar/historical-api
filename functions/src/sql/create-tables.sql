@@ -48,11 +48,13 @@ CREATE TABLE IF NOT EXISTS MintedAddresses (
        CONSTRAINT IX_MintedUserIdValue UNIQUE (userId)
 );
 
-CREATE TABLE IF NOT EXISTS UserBalanceSnapshots (
+CREATE TABLE IF NOT EXISTS BalanceSnapshots (
        timestamp BIGINT NOT NULL,
        network VARCHAR(200) NOT NULL,
        address VARCHAR(200) NOT NULL,
        userId VARCHAR(200) NOT NULL,
+       username VARCHAR(200) NOT NULL,
+       avatarUrl VARCHAR(200) NOT NULL,
        usdAssets VARCHAR(200) NOT NULL,
        ledAssets VARCHAR(200) NOT NULL,
        ledDebt VARCHAR(200) NOT NULL,

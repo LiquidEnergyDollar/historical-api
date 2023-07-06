@@ -6,11 +6,16 @@ import * as logger from "firebase-functions/logger";
 import { InteractionType, InteractionResponseType } from 'discord-interactions';
 import cors from "cors";
 import nacl from "tweetnacl";
-import { createTablesIfNotExist, getFaucetedAddresses, insertDeviationFactor, insertLEDPrice, insertLastGoodPrice, insertMarketPrice, insertMintedAddress, insertRedemptionRate, insertUserBalanceSnapshots, queryAddress, queryDeviationFactor, queryLEDPrice, queryLastGoodPrice, queryLeaderboard, queryMarketPrice, queryMintedAddress, queryRedemptionRate } from './sql/queries';
+import { createTablesIfNotExist, getFaucetedAddresses, insertDeviationFactor, insertLEDPrice, insertLastGoodPrice, insertMarketPrice, insertMintedAddress, insertRedemptionRate, insertBalanceSnapshots, queryAddress, queryDeviationFactor, queryLEDPrice, queryLastGoodPrice, queryLeaderboard, queryMarketPrice, queryMintedAddress, queryRedemptionRate } from './sql/queries';
 import { erc20, ledToken, priceFeed, provider, stabilityPool, troveManager } from './contracts/contracts';
+const { Client, GatewayIntentBits } = require('discord.js');
+
 
 dotenv.config();
 createTablesIfNotExist();
+const discordClient = new Client({ intents: [GatewayIntentBits.GuildMembers] });
+discordClient.login(process.env.DISCORD_TOKEN!);
+
 
 // ----------------------------
 // Set up express app/endpoints
@@ -320,11 +325,15 @@ app.get('/takeSnapshot', async (req, res) => {
     for (let i = 0; i < rows.length; i++) {
         const user = rows[i];
         userSnapshots.push(new Promise(async (resolve, reject) => {
+            
+                const discordUser = await discordClient.users.fetch(user.userid);
                 const snapshot = await getUserBalanceSnapshot(user.address);
                 // Overwrite marketPrice with the provided price
                 snapshot.marketPrice = BigInt(snapshotPrice!.toString());
                 resolve(user.address + "," +
                     user.userid + "," +
+                    discordUser.username + "," +
+                    discordUser.displayAvatarURL() + "," +
                     snapshot.usdBalance!.toString() + "," +
                     snapshot.ledBalance!.toString() + "," +
                     snapshot.ledDebt!.toString() + "," +
@@ -382,12 +391,15 @@ async function insertData() {
         insertions.push(new Promise(async (res, rej) => {
             try {
                 const snapshot = await getUserBalanceSnapshot(user.address);
+                const discordUser = await discordClient.users.fetch(user.userid);
                     
-                    await insertUserBalanceSnapshots(
+                    await insertBalanceSnapshots(
                         timestamp,
                         network,
                         user.address,
                         user.userid,
+                        discordUser.username,
+                        discordUser.displayAvatarURL(),
                         snapshot.usdBalance!.toString(),
                         snapshot.ledBalance!.toString(),
                         snapshot.ledDebt!.toString(),
@@ -404,7 +416,7 @@ async function insertData() {
 }
 
 const insertionCronJob = new CronJob(
-    '*/30 * * * *', // every 30 min
+    '*/1 * * * *', // every 30 min
     async () => {
         try {
             await insertData();
