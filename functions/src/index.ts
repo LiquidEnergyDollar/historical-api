@@ -6,7 +6,7 @@ import * as logger from "firebase-functions/logger";
 import { InteractionType, InteractionResponseType } from 'discord-interactions';
 import cors from "cors";
 import nacl from "tweetnacl";
-import { createTablesIfNotExist, getFaucetedAddresses, insertDeviationFactor, insertLEDPrice, insertLastGoodPrice, insertMarketPrice, insertMintedAddress, insertRedemptionRate, insertBalanceSnapshots, queryAddress, queryDeviationFactor, queryLEDPrice, queryLastGoodPrice, queryLeaderboard, queryMarketPrice, queryMintedAddress, queryRedemptionRate } from './sql/queries';
+import { createTablesIfNotExist, getFaucetedAddresses, insertDeviationFactor, insertLEDPrice, insertLastGoodPrice, insertMarketPrice, insertMintedAddress, insertRedemptionRate, insertBalanceSnapshots, queryAddress, queryDeviationFactor, queryLEDPrice, queryLastGoodPrice, queryLeaderboard, queryMarketPrice, queryMintedAddress, queryRedemptionRate, queryPrices } from './sql/queries';
 import { erc20, ledToken, priceFeed, provider, stabilityPool, troveManager } from './contracts/contracts';
 const { Client, GatewayIntentBits } = require('discord.js');
 
@@ -360,7 +360,12 @@ app.get('/test', async (req, res) => {
     res.send(JSON.stringify(rows));
 });
 
-exports.app = functions.runWith({ maxInstances: 1}).https.onRequest(app);
+app.get('/queryPrices', async (req, res) => {
+    const { rows } = await queryPrices();
+    res.send(JSON.stringify(rows));
+});
+
+exports.app = functions.runWith({ minInstances: 1, maxInstances: 1}).https.onRequest(app);
 
 // ----------------------------
 // Set up cron job for data insertion

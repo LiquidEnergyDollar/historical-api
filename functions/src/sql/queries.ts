@@ -105,3 +105,13 @@ export const queryLeaderboard = async (network: string)=> {
         WHERE network = '${network}'
         AND timestamp IN (SELECT MAX(timestamp) FROM ${Tables.BalanceSnapshots})`);
 }
+
+export const queryPrices = async ()=> {
+    const client = await getPoolClient();
+    return client.query(`SELECT Oracle.timestamp, Oracle.value AS OraclePrice, Market.value AS MarketPrice, Redemption.value AS RedemptionPrice
+        FROM ${Tables.LEDPrice} AS Oracle
+        INNER JOIN ${Tables.MarketPrice} AS Market
+            ON Oracle.timestamp = Market.timestamp
+        INNER JOIN ${Tables.LastGoodPrice} AS Redemption
+            ON Oracle.timestamp = Redemption.timestamp`);
+}
